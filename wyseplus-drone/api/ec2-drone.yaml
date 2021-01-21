@@ -1,0 +1,65 @@
+kind: pipeline
+type: docker
+name: default
+steps:
+- name: builing_api
+  image: ramalingam81/node
+  commands:
+    - ls
+    - npm config set registry http://registry.npmjs.org/
+    - npm install 
+    - ls -la
+#    - npm i -g pm2
+#    - pm2 list 
+#    - pm2 start npm -- start
+#    - ls
+#    - du -sh *
+#    - du -sh /drone/src
+#    - tar -cvzf /drone/src.tar.gz /drone/src
+#    - ls /drone
+#    - pwd
+  when:
+    branch:
+    - master
+    event:
+    - push
+
+- name: scp files
+  image: appleboy/drone-scp
+  settings:
+    host: 
+      - wyseplus.wysemeet.cf
+      - 13.235.95.137
+    username: ubuntu
+    key:
+      from_secret: ssh_key
+    port: 22
+    target: /home/ubuntu/api/
+    source: /drone/src
+  when:
+    branch:
+    - master
+    event:
+    - push
+
+- name: wyseplus-api deployment
+  image: appleboy/drone-ssh
+  settings:
+    host: 
+      - wyseplus.wysemeet.cf
+    username: ubuntu
+    port: 22
+    key:
+      from_secret: ssh_key
+    script:
+      - cd /home/ubuntu/api/drone/src/
+      - netstat -tunlp
+      - export NODE_ENV=wyseplus
+      - pm2 list
+      - pm2 delete all
+      - pm2 start npm -- start
+  when:
+    branch:
+    - master
+    event:
+    - push      

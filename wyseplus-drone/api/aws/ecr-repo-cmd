@@ -1,0 +1,4 @@
+aws ecr create-repository \
+--repository-name wyseplus-admin \
+--image-scanning-configuration scanOnPush=true \
+--region ap-south-1

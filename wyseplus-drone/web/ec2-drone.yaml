@@ -1,0 +1,39 @@
+kind: pipeline
+type: docker
+name: default
+steps:
+- name: builing_ui
+  image: ramalingam81/node
+  commands:
+    - ls
+    - sudo npm install 
+    - sudo npm install react-select-search
+    - sudo npm run build
+    - ls
+
+- name: scp files
+  image: appleboy/drone-scp
+  settings:
+    host: 
+      - wyseplus.wysemeet.cf
+      - 13.235.95.137
+    username: ubuntu
+    key:
+      from_secret: ssh_key
+    port: 22
+    target: /home/ubuntu/web
+    source: build
+
+- name: ssh commands
+  image: appleboy/drone-ssh
+  settings:
+    host: wyseplus.wysemeet.cf
+    username: ubuntu
+    port: 22
+    key:
+      from_secret: ssh_key
+    script:
+      - rm -rf /home/ubuntu/web/backup/*
+      - sudo cp -rv /var/www/html/* /home/ubuntu/web/backup/
+      - sudo cp -rv /home/ubuntu/web/build/* /var/www/html/
+      - sudo systemctl restart apache2

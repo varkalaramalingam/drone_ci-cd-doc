@@ -1,0 +1,108 @@
+kind: pipeline
+type: docker
+name: default
+steps:
+#####builing_getwell_ui
+- name: builing_getwell_ui
+  image: ramalingam81/node
+  commands:
+    - ls
+    - npm config set registry http://registry.npmjs.org/
+    - npm install
+    - ls -la
+  when: 
+    branch: 
+    - master
+    - development
+    event:
+    - push
+
+- name: creating ecr-repo & route53-record
+  image: ramalingam81/awscli-kubectl
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: aws_access_key_id
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: aws_secret_access_key
+    AWS_DEFAULT_REGION:
+      from_secret: aws_default_region
+    AWS_DEFAULT_OUTPUT: json
+  commands:
+    - aws --version
+    - kubectl version --client
+    - ./aws/ecr-repo-cmd
+    - sed -i "s/hostname/$(kubectl get svc nginx-ingress-controller -o jsonpath="{.status.loadBalancer.ingress[*].hostname}")/g"  
+    - ./aws/route53-cmd
+  when:
+    branch:
+    - master
+    event:
+    - push
+
+# to push docker image into ecrrepo
+- name: Publish to ECR
+  image: plugins/ecr
+  settings:
+    access_key:
+      from_secret: aws_access_key_id
+    secret_key:
+      from_secret: aws_secret_access_key
+    region: 
+      from_secret: aws_default_region
+    tags:
+      - latest
+      - build-v${DRONE_BUILD_NUMBER}
+    repo: 290223772942.dkr.ecr.ap-south-1.amazonaws.com/wyselus-admin
+    registry: 290223772942.dkr.ecr.ap-south-1.amazonaws.com
+  when:
+    branch:
+    - master
+    - development
+    event:
+    - push
+
+#deploying image to eks using yml file
+- name: Deployng getwell deployment to eks
+  image: ramalingam81/awscli-kubectl
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: aws_access_key_id
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: aws_secret_access_key
+    AWS_DEFAULT_REGION:
+      from_secret: aws_default_region
+    AWS_DEFAULT_OUTPUT: json
+  commands:
+    - aws eks --region ap-south-1 update-kubeconfig --name eks-cluster
+    - kubectl get deployments -o wide
+    - sed -i 's/latest/build-v${DRONE_BUILD_NUMBER}/g' kubernetes/deployment.yaml
+    - kubectl apply -f kubernetes/deployment.yaml
+    - kubectl annotate deployment.apps/getwell kubernetes.io/change-cause="image updated to build-v${DRONE_BUILD_NUMBER}"
+    - kubectl get deployments -o wide
+  when:
+    branch:
+    - master
+    - development
+    event:
+    - push
+#Deploying getwell service & ingress rule
+- name: Deploying getwell service & ingress rule
+  image: ramalingam81/awscli-kubectl
+  environment:
+    AWS_ACCESS_KEY_ID:
+      from_secret: aws_access_key_id
+    AWS_SECRET_ACCESS_KEY:
+      from_secret: aws_secret_access_key
+    AWS_DEFAULT_REGION:
+      from_secret: aws_default_region
+    AWS_DEFAULT_OUTPUT: json
+  commands:
+    - aws eks --region ap-south-1 update-kubeconfig --name eks-cluster
+    - kubectl get all -o wide
+    - kubectl apply -f kubernetes/service.yaml
+    - kubectl apply -f kubernetes/ingress.yaml
+  when:
+    branch:
+    - master
+    event:
+    - push

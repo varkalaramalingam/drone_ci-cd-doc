@@ -1,0 +1,54 @@
+kind: pipeline
+type: docker
+name: default
+steps:
+- name: builiing-wyseplus_admin
+  image: ramalingam81/node
+  commands:
+    - ls
+    - npm install
+    - npm install -g @angular/cli -y
+    - ng build
+    - ls
+  when:
+    branch:
+    - master
+    event:
+    - push
+
+- name: scp files
+  image: appleboy/drone-scp
+  settings:
+    host: 
+      - wyseplus.wysemeet.cf
+      - 13.235.95.137
+    username: ubuntu
+    key:
+      from_secret: ssh_key
+    port: 22
+    target: /home/ubuntu/admin/
+    source: dist
+  when:
+    branch:
+    - master
+    event:
+    - push
+
+- name: ssh commands
+  image: appleboy/drone-ssh
+  settings:
+    host: wyseplus.wysemeet.cf
+    username: ubuntu
+    port: 22
+    key:
+      from_secret: ssh_key
+    script:
+      - rm -rf /home/ubuntu/admin/backup/*
+      - sudo cp -rv /var/www/admin/* /home/ubuntu/admin/backup/
+      - sudo cp -rv /home/ubuntu/admin/dist/iclap_admin_console/* /var/www/admin/
+      - sudo systemctl restart apache2
+  when:
+    branch:
+    - master
+    event:
+    - push                                           

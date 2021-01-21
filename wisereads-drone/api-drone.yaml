@@ -1,0 +1,123 @@
+kind: pipeline
+name: default
+type: docker
+steps:
+##########
+- name: Wisereads-API
+  image: java:openjdk-8-alpine
+  commands:
+    - ./gradlew clean build      
+# to push docker image into ecrrepo
+- name: Publish to ECR
+  image: plugins/ecr
+  settings:
+    access_key:
+      from_secret: aws_access_key_id
+    secret_key:
+      from_secret: aws_secret_access_key
+    region: us-east-1
+    tags: 
+#   tags: [ latest, 1.0, 1 ]
+      - latest
+      - build-v${DRONE_BUILD_NUMBER}
+    repo: 633025986259.dkr.ecr.us-east-1.amazonaws.com/dronewisereads-api
+    registry: 633025986259.dkr.ecr.us-east-1.amazonaws.com
+  when:  
+    branch: master
+    event: push
+#deploying image to eks using yml file
+- name: Deploy to AWS eks
+  image: 633025986259.dkr.ecr.us-east-1.amazonaws.com/eks-kubectl-wr:latest
+  commands:
+    - aws eks --region us-east-1 update-kubeconfig --name eks-cluster
+    - kubectl get all -o wide
+    - kubectl get nodes -o wide 
+    - sed -i 's/latest/build-v${DRONE_BUILD_NUMBER}/g' deployment.yaml
+    - kubectl apply -f deployment.yml
+    - kubectl annotate deployment.apps/eks-wisereadsapi kubernetes.io/change-cause="image updated to build-v${DRONE_BUILD_NUMBER}"
+    - kubectl get pods -o wide
+    - kubectl get all -o wide
+  when:  
+    event: push  
+##to store jar file in s3 bucket	
+- name: upload to s3
+  image: plugins/s3
+  settings:
+    access_key:
+      from_secret: aws_access_key_id
+    secret_key:
+      from_secret: aws_secret_access_key
+    region: ap-south-1
+    bucket: artifacts-omniwyse
+    source: ./build/libs/books-api-1.0.jar
+    target: jars/
+#  when: 
+#    branch: master
+#    event: push
+
+- name: ssh commands
+  image: appleboy/drone-ssh
+  settings:
+    host: 3.80.185.108
+    username: ec2-user
+    port: 22
+    key:
+      from_secret: ssh_key
+    script:
+      - sudo $(aws ecr get-login --no-include-email --region us-east-1)
+      - sudo docker pull 633025986259.dkr.ecr.us-east-1.amazonaws.com/dronewisereads-api
+      - sudo docker run -d -p 8080:8080 --name wisereadsapi 633025986259.dkr.ecr.us-east-1.amazonaws.com/dronewisereads-api:latest
+      - sudo docker run -d -p 80:80 --name nginx nginx
+       - cd /home/ubuntu/eksdrone
+      - sudo drone exec .drone.yml
+
+
+Drone slack
+---
+- name: slack
+  image: plugins/slack
+  settings:
+    webhook: https://hooks.slack.com/services/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
+    channel: kubernetes
+    username: varkalaramalingam
+  when:
+    status: [ success, failure ]
+----------------------
+- name: slack
+  image: plugins/slack
+  settings:
+#   webhook: https://hooks.slack.com/services/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
+    webhook:
+      from_secret: webhook
+    channel: kubernetes
+    username: varkalaramalingam
+    template: >
+      {{#success build.status}}
+        build {{build.number}} succeeded. Good job.
+      {{else}}
+        build {{build.number}} failed. Fix me please.
+      {{/success}}
+  
+
+Or
+
+    template: >
+      {{#success build.status}}
+        Build {{build.number}} succeeded and deployed to Staging! :)
+        Event: {{build.event}}
+        Branch: {{build.branch}}
+        Tag: {{build.tag}}
+        Git SHA: {{build.commit}}
+        Link: {{build.link}}
+      {{else}}
+        Build {{build.number}} failed and not deployed to Staging :(
+        Event: {{build.event}}
+        Branch: {{build.branch}}
+        Tag: {{build.tag}}
+        Git SHA: {{build.commit}}
+        Link: {{build.link}}
+      {{/success}}
+
+when:
+    status: [ success, failure ]
+

@@ -1,0 +1,12 @@
+{
+            "Comment": "CREATE/DELETE/UPSERT a record ",
+            "Changes": [{
+            "Action": "CREATE",
+                        "ResourceRecordSet": {
+                                    "Name": "getwell.wysemeet.cf",
+                                    "Type": "CNAME",
+                                    "TTL": 300,
+                                 "ResourceRecords": [{ "Value": "hostname"}]
+}}]
+}
+

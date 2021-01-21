@@ -1,0 +1,1 @@
+aws route53 change-resource-record-sets --hosted-zone-id Z0918878HDAY2S15VEFC --change-batch file://aws/route53-record.json
